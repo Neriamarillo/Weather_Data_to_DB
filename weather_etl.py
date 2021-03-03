@@ -5,6 +5,7 @@ import datetime
 import mysql.connector as mysql
 from getpass import getpass
 import sqlalchemy
+import configparser
 
 
 def check_db_exists(db_name):
@@ -21,12 +22,19 @@ def check_db_exists(db_name):
         db_cursor.execute("CREATE DATABASE IF NOT EXISTS {}".format(db_name))
 
 
-# Enter your OpenWeather API Key
-api_key = input("Enter OpenWeather API Key")
+# Configuration Init
+config = configparser.ConfigParser()
+config.read('config.ini')
+api_key = config.get('api', 'key')
+if not api_key:
+    api_key = input("Enter OpenWeather API Key: ")
+    config.set('api', 'key', api_key)
+
+# Load US States
 state_data = pd.read_csv('US_States.csv')
 
 # Get previous day and convert to UNIX Utc timestamp for historical API call
-yesterday = datetime.datetime.now() - datetime.timedelta(days=2)
+yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
 timestamp = datetime.datetime.timestamp(yesterday)
 
 # Extract Data
@@ -53,32 +61,43 @@ for state in state_data.State:
     weather_list.append(weather_dict)
 
 weather_json = json.dumps(weather_list)
+
 # Transform Data
-print('Normalizing json data from API')
+print('Normalizing JSON data from API')
 
 df = pd.json_normalize(json.loads(weather_json), ['Data', 'hourly', 'weather'],
                        meta=['State', ['Data', 'timezone'], ['Data', 'hourly', 'temp']]).rename(
     columns={'Data.timezone': 'Timezone', 'main': 'Conditions', 'Data.hourly.temp': 'Temp'}).drop(
     ['id', 'description', 'icon'], axis=1)
-flat_df = df.groupby(['State', 'Timezone', 'Conditions'])['Temp'].agg([min, max]).reset_index().rename(
-    columns={'min': 'Min_Temp', 'max': 'Max_Temp'})
-print(flat_df.to_string())
 
-# Load Data
-check_db_exists("daily_us_weather_data")
+flat_df = df.groupby(['State', 'Timezone']).agg({'Temp': [min, max], 'Conditions': [max]}).reset_index()
+flat_df['Date'] = yesterday.strftime('%a %b %d %Y')
+flat_df.columns = ['State', 'Timezone', 'Min_Temp', 'Max_Temp', 'Conditions', 'Date']
 
-engine = sqlalchemy.create_engine('mysql+mysqlconnector://user:password@localhost/daily_us_weather_data')
+# # Load Data
+user = config.get('mysql', 'user')
+if not user:
+    user = input('Enter username: ')
+    config.set('mysql', 'user', user)
+
+password = config.get('mysql', 'password')
+if not password:
+    password = input('Enter password: ')
+    config.set('mysql', 'password', password)
+
+engine = sqlalchemy.create_engine('mysql+mysqlconnector://{}:{}@localhost/daily_us_weather_data'.format(user, password))
 db = mysql.connect(
     host="localhost",
-    user=input('Enter username: '),
-    password=getpass("Enter password: "),
-    database="daily_us_weather_data"
+    user=user,
+    password=password,
+    database=config.get('mysql', 'db_table_name')
 )
 cursor = db.cursor()
 
 create_state_weather_table_query = """
     CREATE TABLE IF NOT EXISTS daily_state_weather_data(
         id INT(50) AUTO_INCREMENT PRIMARY KEY,
+        Date VARCHAR(200),
         State VARCHAR(200),
         Timezone VARCHAR(200),
         Conditions VARCHAR(200),
@@ -95,3 +114,7 @@ print("Data was written to database")
 
 db.close()
 print("Closed database successfully")
+
+# Save Configuration File
+with open('config.ini', 'w') as config_file:
+    config.write(config_file)
