@@ -30,6 +30,16 @@ if not api_key:
     api_key = input("Enter OpenWeather API Key: ")
     config.set('api', 'key', api_key)
 
+user = config.get('mysql', 'user')
+if not user:
+    user = input('Enter database username: ')
+    config.set('mysql', 'user', user)
+
+password = config.get('mysql', 'password')
+if not password:
+    password = input('Enter database password: ')
+    config.set('mysql', 'password', password)
+
 # Load US States
 state_data = pd.read_csv('US_States.csv')
 
@@ -75,16 +85,6 @@ flat_df['Date'] = yesterday.strftime('%a %b %d %Y')
 flat_df.columns = ['State', 'Timezone', 'Min_Temp', 'Max_Temp', 'Conditions', 'Date']
 
 # # Load Data
-user = config.get('mysql', 'user')
-if not user:
-    user = input('Enter username: ')
-    config.set('mysql', 'user', user)
-
-password = config.get('mysql', 'password')
-if not password:
-    password = input('Enter password: ')
-    config.set('mysql', 'password', password)
-
 engine = sqlalchemy.create_engine('mysql+mysqlconnector://{}:{}@localhost/daily_us_weather_data'.format(user, password))
 db = mysql.connect(
     host="localhost",
