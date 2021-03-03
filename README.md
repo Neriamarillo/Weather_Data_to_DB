@@ -1,7 +1,7 @@
 # ETL Process for weather data of all 50 US States.
 
 # Scraping
-Scraped the [LatLong](https://www.latlong.net/category/states-236-14.html) website to obtain all the US States 
+Scraped the [LatLong](https://www.latlong.net/category/states-236-14.html) website using Selenium to obtain all the US States 
 latitude and longitude values and save them to a .csv file.
 
 ## Extraction
