@@ -10,6 +10,7 @@ previous day is used.
 
 ## Transform
 Transformed JSON API Response to a Pandas DataFrame to show:
+- Date of collection
 - State Name
 - Timezone
 - Weather Conditions for the min and max temperatures for the day
@@ -17,4 +18,4 @@ Transformed JSON API Response to a Pandas DataFrame to show:
 - Maximum Temperature of day
 
 ## Load
-Load the dataframe to a MySQL database hosted locally.
+Load the dataframe to a MySQL database hosted locally using the mysql.connector.
