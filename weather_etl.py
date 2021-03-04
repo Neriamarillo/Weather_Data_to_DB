@@ -3,28 +3,16 @@ import requests
 import json
 import datetime
 import mysql.connector as mysql
-from getpass import getpass
 import sqlalchemy
 import configparser
-
-
-def check_db_exists(db_name):
-    # Enter your MySQL credentials
-    conn = mysql.connect(
-        host="localhost",
-        user=input("Enter username: "),
-        password=getpass("Enter password: "),
-    )
-    db_cursor = conn.cursor()
-    db_cursor.execute("SHOW DATABASES")
-    databases = db_cursor.fetchall()
-    if db_name not in databases:
-        db_cursor.execute("CREATE DATABASE IF NOT EXISTS {}".format(db_name))
-
 
 # Configuration Init
 config = configparser.ConfigParser()
 config.read('config.ini')
+
+if config.getboolean('init_run', 'is_first_run'):
+    config.set('init_run', 'is_first_run', "False")
+
 api_key = config.get('api', 'key')
 if not api_key:
     api_key = input("Enter OpenWeather API Key: ")
@@ -39,6 +27,29 @@ password = config.get('mysql', 'password')
 if not password:
     password = input('Enter database password: ')
     config.set('mysql', 'password', password)
+
+
+def check_db_exists(db_name):
+    print('Checking for existing database')
+    # Enter your MySQL credentials
+    conn = mysql.connect(
+        host="localhost",
+        user=user,
+        password=password,
+    )
+    db_cursor = conn.cursor()
+    db_cursor.execute("SHOW DATABASES")
+    databases = db_cursor.fetchall()
+    if db_name not in databases:
+        db_cursor.execute("CREATE DATABASE IF NOT EXISTS {}".format(db_name))
+        config.set('mysql', 'db_name', "daily_us_weather_data")
+        print('Database created')
+    conn.close()
+
+
+# Check for database
+if not config.get('mysql', 'db_name'):
+    check_db_exists('daily_us_weather_data')
 
 # Load US States
 state_data = pd.read_csv('US_States.csv')
@@ -70,10 +81,9 @@ for state in state_data.State:
     weather_dict['Data'] = payload_data
     weather_list.append(weather_dict)
 
-weather_json = json.dumps(weather_list)
-
 # Transform Data
 print('Normalizing JSON data from API')
+weather_json = json.dumps(weather_list)
 
 df = pd.json_normalize(json.loads(weather_json), ['Data', 'hourly', 'weather'],
                        meta=['State', ['Data', 'timezone'], ['Data', 'hourly', 'temp']]).rename(
@@ -81,23 +91,24 @@ df = pd.json_normalize(json.loads(weather_json), ['Data', 'hourly', 'weather'],
     ['id', 'description', 'icon'], axis=1)
 
 flat_df = df.groupby(['State', 'Timezone']).agg({'Temp': [min, max], 'Conditions': [max]}).reset_index()
-flat_df['Date'] = yesterday.strftime('%a %b %d %Y')
+flat_df['Date'] = yesterday.date()
 flat_df.columns = ['State', 'Timezone', 'Min_Temp', 'Max_Temp', 'Conditions', 'Date']
 
 # # Load Data
-engine = sqlalchemy.create_engine('mysql+mysqlconnector://{}:{}@localhost/daily_us_weather_data'.format(user, password))
+engine = sqlalchemy.create_engine('mysql+mysqlconnector://{}:{}@localhost/{}'.format(
+    user, password, config.get('mysql', 'db_name')))
 db = mysql.connect(
     host="localhost",
     user=user,
     password=password,
-    database=config.get('mysql', 'db_table_name')
+    database=config.get('mysql', 'db_name')
 )
 cursor = db.cursor()
 
 create_state_weather_table_query = """
     CREATE TABLE IF NOT EXISTS daily_state_weather_data(
         id INT(50) AUTO_INCREMENT PRIMARY KEY,
-        Date VARCHAR(200),
+        Date DATE,
         State VARCHAR(200),
         Timezone VARCHAR(200),
         Conditions VARCHAR(200),
@@ -111,6 +122,12 @@ print("Opened database successfully")
 
 flat_df.to_sql(name="daily_state_weather_data", con=engine, index=False, if_exists='append')
 print("Data was written to database")
+
+print("Cleaning out entries older than 7 days")
+delete_old_entries_query = """
+    DELETE FROM daily_state_weather_data WHERE Date < (NOW() - INTERVAL 7 DAY)
+    """
+cursor.execute(delete_old_entries_query)
 
 db.close()
 print("Closed database successfully")
