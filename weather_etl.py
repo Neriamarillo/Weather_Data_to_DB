@@ -18,6 +18,11 @@ if not api_key:
     api_key = input("Enter OpenWeather API Key: ")
     config.set('api', 'key', api_key)
 
+host = config.get('mysql', 'host')
+if not host:
+    host = input('Enter Hostname: ')
+    config.set('mysql', 'host', host)
+
 user = config.get('mysql', 'user')
 if not user:
     user = input('Enter database username: ')
@@ -33,7 +38,7 @@ def check_db_exists(db_name):
     print('Checking for existing database')
     # Enter your MySQL credentials
     conn = mysql.connect(
-        host="localhost",
+        host=host,
         user=user,
         password=password,
     )
@@ -42,7 +47,7 @@ def check_db_exists(db_name):
     databases = db_cursor.fetchall()
     if db_name not in databases:
         db_cursor.execute("CREATE DATABASE IF NOT EXISTS {}".format(db_name))
-        config.set('mysql', 'db_name', "daily_us_weather_data")
+        config.set('mysql', 'db_name', 'daily_us_weather_data')
         print('Database created')
     conn.close()
 
@@ -95,10 +100,10 @@ flat_df['Date'] = yesterday.date()
 flat_df.columns = ['State', 'Timezone', 'Min_Temp', 'Max_Temp', 'Conditions', 'Date']
 
 # # Load Data
-engine = sqlalchemy.create_engine('mysql+mysqlconnector://{}:{}@localhost/{}'.format(
-    user, password, config.get('mysql', 'db_name')))
+engine = sqlalchemy.create_engine('mysql+mysqlconnector://{}:{}@{}/{}'.format(
+    user, password, host, config.get('mysql', 'db_name')))
 db = mysql.connect(
-    host="localhost",
+    host=host,
     user=user,
     password=password,
     database=config.get('mysql', 'db_name')
