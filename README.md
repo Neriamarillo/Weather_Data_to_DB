@@ -19,3 +19,6 @@ Transformed JSON API Response to a Pandas DataFrame to show:
 
 ## Load
 Load the dataframe to a MySQL database hosted locally using the mysql.connector.
+
+## Visualization
+Using Metabase as a visualization tool, we can show the US map to view the average minimun and maximum temperatures for all 50 states. 
